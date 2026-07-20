@@ -205,21 +205,9 @@ jobs:
           key: spm-${{ hashFiles('MPVKit/Package.swift') }}
           restore-keys: spm-
 
-      - name: Right-size JVM / Kotlin-Native memory for the runner
-        run: |
-          # The release-framework LINK (linkReleaseFrameworkIosArm64) is the memory hog and
-          # needs > 16G for the 0.3.1 codebase (it OOMs at the stock 16G). Give Kotlin/Native
-          # a high heap CEILING (JVM commits only what it uses; overflow spills to the runner's
-          # swap) and TRIM the gradle/daemon heaps (they're not the link) so there's RAM to spare.
-          {
-            echo ""
-            echo "# --- CI memory overrides (append = override) ---"
-            echo "org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
-            echo "kotlin.native.jvmArgs=-Xmx24g"
-            echo "kotlin.daemon.jvmargs=-Xmx4g"
-            echo "org.gradle.daemon=false"
-            echo "org.gradle.workers.max=1"
-          } >> gradle.properties
+      # NOTE: do NOT trim gradle.properties heaps. The release-framework LINK uses the
+      # Gradle/Kotlin-daemon heaps (12G/8G), NOT kotlin.native.jvmArgs — cutting them
+      # starves the link and OOMs it. Stock config is luqman's proven, working setup.
 
       - name: Download Nuvio Engine Apple XCFramework (public release)
         run: |
@@ -265,8 +253,6 @@ jobs:
           EOF
 
       - name: Build iOS app (unsigned)
-        env:
-          KOTLIN_DAEMON_JVMARGS: "-Xmx3g"
         run: |
           cd iosApp
           xcodebuild \
