@@ -10,7 +10,7 @@ name: Sync my forks with upstream
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # every 6 hours
+    - cron: '23 * * * *'   # hourly, at :23 (off the top-of-hour to dodge GitHub cron congestion)
   workflow_dispatch:
 
 permissions:
