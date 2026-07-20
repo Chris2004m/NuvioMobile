@@ -207,14 +207,15 @@ jobs:
 
       - name: Right-size JVM / Kotlin-Native memory for the runner
         run: |
-          # The repo asks for 36G total (Gradle 12G + Kotlin/Native 16G + daemon 8G) on a
-          # ~14GB runner, which thrashes swap. Keep Kotlin/Native at its proven 16G (dropping
-          # it OOMs the compiler) but cut the wasteful Gradle/daemon heaps so K-N has real RAM.
+          # The release-framework LINK (linkReleaseFrameworkIosArm64) is the memory hog and
+          # needs > 16G for the 0.3.1 codebase (it OOMs at the stock 16G). Give Kotlin/Native
+          # a high heap CEILING (JVM commits only what it uses; overflow spills to the runner's
+          # swap) and TRIM the gradle/daemon heaps (they're not the link) so there's RAM to spare.
           {
             echo ""
             echo "# --- CI memory overrides (append = override) ---"
             echo "org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
-            echo "kotlin.native.jvmArgs=-Xmx16g"
+            echo "kotlin.native.jvmArgs=-Xmx24g"
             echo "kotlin.daemon.jvmargs=-Xmx4g"
             echo "org.gradle.daemon=false"
             echo "org.gradle.workers.max=1"
