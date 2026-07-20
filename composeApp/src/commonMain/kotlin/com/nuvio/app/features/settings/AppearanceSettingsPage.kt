@@ -20,9 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Style
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.AppTheme
+import com.nuvio.app.isIos
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioBottomSheetDivider
 import com.nuvio.app.core.ui.NuvioModalBottomSheet
@@ -50,19 +48,31 @@ import com.nuvio.app.core.ui.ThemeColors
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.cd_selected
+import nuvio.composeapp.generated.resources.collections_header
 import nuvio.composeapp.generated.resources.compose_settings_page_continue_watching
+import nuvio.composeapp.generated.resources.compose_settings_page_homescreen
+import nuvio.composeapp.generated.resources.compose_settings_page_meta_screen
 import nuvio.composeapp.generated.resources.compose_settings_page_poster_customization
+import nuvio.composeapp.generated.resources.compose_settings_page_streams
 import nuvio.composeapp.generated.resources.settings_appearance_app_language
 import nuvio.composeapp.generated.resources.settings_appearance_app_language_sheet_title
+import nuvio.composeapp.generated.resources.settings_appearance_nav_bar_style
+import nuvio.composeapp.generated.resources.settings_appearance_nav_bar_style_sheet_title
 import nuvio.composeapp.generated.resources.settings_appearance_amoled_black
 import nuvio.composeapp.generated.resources.settings_appearance_amoled_description
 import nuvio.composeapp.generated.resources.settings_appearance_continue_watching_description
 import nuvio.composeapp.generated.resources.settings_appearance_liquid_glass
 import nuvio.composeapp.generated.resources.settings_appearance_liquid_glass_description
 import nuvio.composeapp.generated.resources.settings_appearance_poster_customization_description
+import nuvio.composeapp.generated.resources.settings_appearance_section_detail_page
 import nuvio.composeapp.generated.resources.settings_appearance_section_display
 import nuvio.composeapp.generated.resources.settings_appearance_section_home
+import nuvio.composeapp.generated.resources.settings_appearance_section_streams
 import nuvio.composeapp.generated.resources.settings_appearance_section_theme
+import nuvio.composeapp.generated.resources.settings_content_discovery_collections_description
+import nuvio.composeapp.generated.resources.settings_content_discovery_homescreen_description
+import nuvio.composeapp.generated.resources.settings_content_discovery_meta_screen_description
+import nuvio.composeapp.generated.resources.compose_settings_root_streams_description
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,6 +89,12 @@ internal fun LazyListScope.appearanceSettingsContent(
     onLiquidGlassNativeTabBarToggle: (Boolean) -> Unit,
     selectedAppLanguage: AppLanguage,
     onAppLanguageSelected: (AppLanguage) -> Unit,
+    selectedNavBarStyle: NavBarStyle,
+    onNavBarStyleSelected: (NavBarStyle) -> Unit,
+    onHomescreenClick: () -> Unit,
+    onMetaScreenClick: () -> Unit,
+    onStreamsClick: () -> Unit,
+    onCollectionsClick: () -> Unit,
     onContinueWatchingClick: () -> Unit,
     onPosterCustomizationClick: () -> Unit,
 ) {
@@ -135,6 +151,7 @@ internal fun LazyListScope.appearanceSettingsContent(
     }
     item {
         var showLanguageSheet by remember { mutableStateOf(false) }
+        var showNavBarStyleSheet by remember { mutableStateOf(false) }
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_display),
             isTablet = isTablet,
@@ -161,10 +178,18 @@ internal fun LazyListScope.appearanceSettingsContent(
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_appearance_app_language),
                     description = stringResource(selectedAppLanguage.labelRes),
-                    icon = Icons.Rounded.Language,
                     isTablet = isTablet,
                     onClick = { showLanguageSheet = true },
                 )
+                if (!isIos) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.settings_appearance_nav_bar_style),
+                        description = stringResource(selectedNavBarStyle.labelRes),
+                        isTablet = isTablet,
+                        onClick = { showNavBarStyleSheet = true },
+                    )
+                }
             }
         }
 
@@ -178,6 +203,17 @@ internal fun LazyListScope.appearanceSettingsContent(
                 onDismiss = { showLanguageSheet = false },
             )
         }
+
+        if (showNavBarStyleSheet) {
+            NavBarStyleBottomSheet(
+                selectedStyle = selectedNavBarStyle,
+                onStyleSelected = {
+                    onNavBarStyleSelected(it)
+                    showNavBarStyleSheet = false
+                },
+                onDismiss = { showNavBarStyleSheet = false },
+            )
+        }
     }
 
     item {
@@ -187,9 +223,22 @@ internal fun LazyListScope.appearanceSettingsContent(
         ) {
             SettingsGroup(isTablet = isTablet) {
                 SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_homescreen),
+                    description = stringResource(Res.string.settings_content_discovery_homescreen_description),
+                    isTablet = isTablet,
+                    onClick = onHomescreenClick,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.collections_header),
+                    description = stringResource(Res.string.settings_content_discovery_collections_description),
+                    isTablet = isTablet,
+                    onClick = onCollectionsClick,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
                     title = stringResource(Res.string.compose_settings_page_continue_watching),
                     description = stringResource(Res.string.settings_appearance_continue_watching_description),
-                    icon = Icons.Rounded.Style,
                     isTablet = isTablet,
                     onClick = onContinueWatchingClick,
                 )
@@ -197,9 +246,38 @@ internal fun LazyListScope.appearanceSettingsContent(
                 SettingsNavigationRow(
                     title = stringResource(Res.string.compose_settings_page_poster_customization),
                     description = stringResource(Res.string.settings_appearance_poster_customization_description),
-                    icon = Icons.Rounded.Tune,
                     isTablet = isTablet,
                     onClick = onPosterCustomizationClick,
+                )
+            }
+        }
+    }
+    item {
+        SettingsSection(
+            title = stringResource(Res.string.settings_appearance_section_streams),
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_streams),
+                    description = stringResource(Res.string.compose_settings_root_streams_description),
+                    isTablet = isTablet,
+                    onClick = onStreamsClick,
+                )
+            }
+        }
+    }
+    item {
+        SettingsSection(
+            title = stringResource(Res.string.settings_appearance_section_detail_page),
+            isTablet = isTablet,
+        ) {
+            SettingsGroup(isTablet = isTablet) {
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.compose_settings_page_meta_screen),
+                    description = stringResource(Res.string.settings_content_discovery_meta_screen_description),
+                    isTablet = isTablet,
+                    onClick = onMetaScreenClick,
                 )
             }
         }
@@ -354,5 +432,66 @@ private fun ThemeChip(
                 .clip(RoundedCornerShape(2.dp))
                 .background(palette.focusRing),
         )
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavBarStyleBottomSheet(
+    selectedStyle: NavBarStyle,
+    onStyleSelected: (NavBarStyle) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+
+    NuvioModalBottomSheet(
+        onDismissRequest = {
+            coroutineScope.launch {
+                dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+            }
+        },
+        sheetState = sheetState,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+        ) {
+            item {
+                Text(
+                    text = stringResource(Res.string.settings_appearance_nav_bar_style_sheet_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                )
+            }
+
+            itemsIndexed(NavBarStyle.entries.toList()) { index, style ->
+                if (index > 0) {
+                    NuvioBottomSheetDivider()
+                }
+                NuvioBottomSheetActionRow(
+                    title = stringResource(style.labelRes),
+                    onClick = {
+                        onStyleSelected(style)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                    trailingContent = {
+                        if (style == selectedStyle) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(Res.string.cd_selected),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                )
+            }
+        }
     }
 }

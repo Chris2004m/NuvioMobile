@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,13 +40,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.ui.heroStretchHeight
+import com.nuvio.app.core.ui.heroStretchZoom
 import com.nuvio.app.features.details.MetaDetails
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -54,14 +59,17 @@ import org.jetbrains.compose.resources.stringResource
 fun DetailHero(
     meta: MetaDetails,
     isTablet: Boolean = false,
-    scrollOffset: Int = 0,
+    scrollOffset: () -> Int = { 0 },
+    stretchPx: () -> Float = { 0f },
     contentMaxWidth: Dp = 560.dp,
     onHeightChanged: (Int) -> Unit = {},
     heroTrailerSourceUrl: String? = null,
     heroTrailerSourceAudioUrl: String? = null,
     heroTrailerReady: Boolean = false,
-    heroTrailerPlayWhenReady: Boolean = false,
+    heroTrailerPlayWhenReady: () -> Boolean = { false },
     heroTrailerMuted: Boolean = true,
+    heroGradientColor: Color? = null,
+    onBackdropLoaded: (Painter, ImageBitmap?) -> Unit = { _, _ -> },
     onHeroTrailerMuteToggle: () -> Unit = {},
     onHeroTrailerReady: () -> Unit = {},
     onHeroTrailerEnded: () -> Unit = {},
@@ -81,16 +89,19 @@ fun DetailHero(
         val heroChromeTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
             8.dp +
             ((40.dp - muteIconSize) / 2)
+        val bottomGradientColor = heroGradientColor ?: MaterialTheme.colorScheme.background
         var logoLoadError by remember(meta.id, meta.logo) {
             mutableStateOf(false)
         }
         val logoUrl = meta.logo?.takeIf { it.isNotBlank() }
 
+        val heroBaseHeightPx = with(LocalDensity.current) { heroHeight.roundToPx() }
+        LaunchedEffect(heroBaseHeightPx) { onHeightChanged(heroBaseHeightPx) }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(heroHeight)
-                .onSizeChanged { onHeightChanged(it.height) }
+                .heroStretchHeight(heroHeight, stretchPx)
                 .graphicsLayer {
                     clip = true
                 },
@@ -106,14 +117,23 @@ fun DetailHero(
                         model = imageUrl,
                         contentDescription = meta.name,
                         modifier = Modifier
-                            .fillMaxSize()
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(heroHeight)
+                            .heroStretchZoom(stretchPx)
                             .graphicsLayer {
-                                translationY = scrollOffset * 0.5f
+                                translationY = scrollOffset() * 0.5f
                                 scaleX = 1.08f
                                 scaleY = 1.08f
-                            },
+                        },
                         alignment = if (isTablet) Alignment.TopCenter else Alignment.Center,
                         contentScale = ContentScale.Crop,
+                        onSuccess = { state ->
+                            onBackdropLoaded(
+                                state.painter,
+                                loadedBackdropImageBitmap(state.result),
+                            )
+                        },
                     )
                 } else {
                     Box(
@@ -126,13 +146,16 @@ fun DetailHero(
                     HeroTrailerPlayerSurface(
                         sourceUrl = heroTrailerSourceUrl,
                         sourceAudioUrl = heroTrailerSourceAudioUrl,
-                        playWhenReady = heroTrailerPlayWhenReady,
+                        playWhenReady = heroTrailerPlayWhenReady(),
                         muted = heroTrailerMuted,
                         modifier = Modifier
-                            .fillMaxSize()
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(heroHeight)
+                            .heroStretchZoom(stretchPx)
                             .graphicsLayer {
                                 alpha = trailerAlpha
-                                translationY = scrollOffset * 0.5f
+                                translationY = scrollOffset() * 0.5f
                                 scaleX = 1.08f
                                 scaleY = 1.08f
                             },
@@ -190,12 +213,12 @@ fun DetailHero(
                             Brush.verticalGradient(
                                 colorStops = arrayOf(
                                     0.00f to Color.Transparent,
-                                    0.16f to MaterialTheme.colorScheme.background.copy(alpha = 0.04f),
-                                    0.32f to MaterialTheme.colorScheme.background.copy(alpha = 0.14f),
-                                    0.50f to MaterialTheme.colorScheme.background.copy(alpha = 0.34f),
-                                    0.68f to MaterialTheme.colorScheme.background.copy(alpha = 0.62f),
-                                    0.84f to MaterialTheme.colorScheme.background.copy(alpha = 0.84f),
-                                    1.00f to MaterialTheme.colorScheme.background,
+                                    0.16f to bottomGradientColor.copy(alpha = 0.04f),
+                                    0.32f to bottomGradientColor.copy(alpha = 0.14f),
+                                    0.50f to bottomGradientColor.copy(alpha = 0.34f),
+                                    0.68f to bottomGradientColor.copy(alpha = 0.62f),
+                                    0.84f to bottomGradientColor.copy(alpha = 0.84f),
+                                    1.00f to bottomGradientColor,
                                 ),
                             ),
                         ),

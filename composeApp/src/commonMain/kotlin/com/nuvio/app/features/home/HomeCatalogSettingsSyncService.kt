@@ -6,6 +6,7 @@ import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.sync.HOME_CATALOG_LEGACY_SYNC_PLATFORMS
 import com.nuvio.app.core.sync.HOME_CATALOG_SHARED_SYNC_PLATFORM
+import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -34,10 +35,12 @@ data class SyncCatalogItem(
     @SerialName("custom_title") val customTitle: String = "",
     @SerialName("is_collection") val isCollection: Boolean = false,
     @SerialName("collection_id") val collectionId: String = "",
+    val key: String = "",
 )
 
 @Serializable
 data class SyncHomeCatalogPayload(
+    @SerialName("show_catalog_type") val showCatalogType: Boolean = true,
     @SerialName("hide_unreleased_content") val hideUnreleasedContent: Boolean = false,
     @SerialName("hide_catalog_underline") val hideCatalogUnderline: Boolean = false,
     val items: List<SyncCatalogItem> = emptyList(),
@@ -54,6 +57,7 @@ private data class RemoteHomeCatalogSettings(
     val platform: String,
     val payload: SyncHomeCatalogPayload,
     val updatedAt: String?,
+    val hasShowCatalogType: Boolean,
     val hasHideUnreleasedContent: Boolean,
     val hasHideCatalogUnderline: Boolean,
 )
@@ -72,6 +76,7 @@ object HomeCatalogSettingsSyncService {
     }
 
     private const val HIDE_UNRELEASED_CONTENT_KEY = "hide_unreleased_content"
+    private const val SHOW_CATALOG_TYPE_KEY = "show_catalog_type"
     private const val HIDE_CATALOG_UNDERLINE_KEY = "hide_catalog_underline"
 
     @Volatile
@@ -136,6 +141,7 @@ object HomeCatalogSettingsSyncService {
                 put("p_profile_id", profileId)
                 put("p_platform", HOME_CATALOG_SHARED_SYNC_PLATFORM)
                 put("p_settings_json", jsonElement)
+                putSyncOriginClientId()
             }
             SupabaseProvider.client.postgrest.rpc("sync_push_home_catalog_settings", params)
             log.d { "pushToRemote — success" }
@@ -213,6 +219,7 @@ object HomeCatalogSettingsSyncService {
             platform = platform,
             payload = payload,
             updatedAt = blob.updatedAt,
+            hasShowCatalogType = blob.settingsJson.containsKey(SHOW_CATALOG_TYPE_KEY),
             hasHideUnreleasedContent = blob.settingsJson.containsKey(HIDE_UNRELEASED_CONTENT_KEY),
             hasHideCatalogUnderline = blob.settingsJson.containsKey(HIDE_CATALOG_UNDERLINE_KEY),
         )
@@ -224,12 +231,17 @@ object HomeCatalogSettingsSyncService {
         val hideUnreleasedSource = rows
             .filter { it.hasHideUnreleasedContent }
             .maxByOrNull { it.updatedAt.orEmpty() }
+        val showCatalogTypeSource = rows
+            .filter { it.hasShowCatalogType }
+            .maxByOrNull { it.updatedAt.orEmpty() }
         val hideUnderlineSource = rows
             .filter { it.hasHideCatalogUnderline }
             .maxByOrNull { it.updatedAt.orEmpty() }
 
         return copy(
             payload = payload.copy(
+                showCatalogType = showCatalogTypeSource?.payload?.showCatalogType
+                    ?: payload.showCatalogType,
                 hideUnreleasedContent = hideUnreleasedSource?.payload?.hideUnreleasedContent
                     ?: payload.hideUnreleasedContent,
                 hideCatalogUnderline = hideUnderlineSource?.payload?.hideCatalogUnderline
@@ -256,6 +268,11 @@ object HomeCatalogSettingsSyncService {
     ): SyncHomeCatalogPayload? = runCatching {
         val decoded = json.decodeFromJsonElement(SyncHomeCatalogPayload.serializer(), settingsJson)
         decoded.copy(
+            showCatalogType = if (settingsJson.containsKey(SHOW_CATALOG_TYPE_KEY)) {
+                decoded.showCatalogType
+            } else {
+                localPayload.showCatalogType
+            },
             hideUnreleasedContent = if (settingsJson.containsKey(HIDE_UNRELEASED_CONTENT_KEY)) {
                 decoded.hideUnreleasedContent
             } else {
