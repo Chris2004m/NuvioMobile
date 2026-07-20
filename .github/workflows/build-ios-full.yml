@@ -1,0 +1,263 @@
+name: Build iOS Full IPA
+
+# Watches the UPSTREAM repo (NuvioMedia/NuvioMobile) for new releases and, when one
+# appears that this fork hasn't built yet, builds an UNSIGNED "Full" iOS IPA and
+# publishes it as a matching release on THIS fork.
+#
+# Trigger: cron poll every 6h (GitHub can't receive upstream's release events in a
+# fork), plus manual dispatch with an optional tag for backfilling old releases.
+#
+# The IPA is unsigned (no Apple certificates) — install via AltStore / SideStore /
+# Sideloadly, which re-sign on-device with your own free Apple ID.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream release tag to build (leave blank = latest upstream release)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-ios-full
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: NuvioMedia/NuvioMobile
+
+jobs:
+  detect:
+    name: Detect new upstream release
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      tag: ${{ steps.check.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - id: check
+        run: |
+          set -euo pipefail
+          IN_TAG="${{ github.event.inputs.tag }}"
+          if [ -n "${IN_TAG}" ]; then
+            TAG="${IN_TAG}"
+          else
+            TAG="$(gh api "repos/${UPSTREAM}/releases/latest" --jq .tag_name)"
+          fi
+          echo "Upstream target tag: ${TAG}"
+
+          # Only ever build a sane version-like tag.
+          if ! printf '%s' "${TAG}" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z._-]*$'; then
+            echo "::error::Refusing to build unexpected tag '${TAG}'"; exit 1
+          fi
+
+          # Safety gate: on the automatic (cron) schedule, don't publish a keyless build
+          # before secrets are configured. Manual dispatch always proceeds (for testing).
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "${{ secrets.TMDB_API_KEY }}" ]; then
+            echo "Secrets not configured yet (TMDB_API_KEY empty) — skipping scheduled build for ${TAG}."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Idempotency: skip if this fork already published that release.
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists on this fork — nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New upstream release ${TAG} — will build."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build unsigned Full IPA
+    needs: detect
+    if: needs.detect.outputs.build == 'true'
+    runs-on: macos-15-intel
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.detect.outputs.tag }}
+      NUVIO_ENGINE_VERSION: '0.1.0'
+    steps:
+      - name: Checkout upstream at tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ needs.detect.outputs.tag }}
+          lfs: true
+          fetch-depth: 0
+
+      - name: Fetch MPVKit submodule
+        run: git submodule update --init --recursive MPVKit
+
+      - name: Patch MPVKit Package.swift for CI (no-op when already url-based)
+        run: |
+          cd MPVKit
+          python3 - << 'PYEOF'
+          import re
+
+          replacements = {
+              "Libplacebo": (
+                  "https://github.com/mpvkit/libplacebo-build/releases/download/7.360.1/Libplacebo.xcframework.zip",
+                  "2fa3d54cb81f302d6f11c7b2f509af30944381c3b11ee9d35096eb4637a6e2dd"
+              ),
+              "Libavcodec": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libavcodec.xcframework.zip",
+                  "bf0aa69d62981ac8859ef08849312474cf5201bf51242ecece86007b2cc07444"
+              ),
+              "Libavdevice": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libavdevice.xcframework.zip",
+                  "3aec22d82735405a32b87488a13c1889277af10522bb5c8dc543278b2f2bb1ac"
+              ),
+              "Libavformat": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libavformat.xcframework.zip",
+                  "962c010aa2c4b369cf8f6efa2b0bd26e0a2392d58a1487e6a2be8c3d73044d45"
+              ),
+              "Libavfilter": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libavfilter.xcframework.zip",
+                  "1ea0aebfc460f347d631fad982dd1db3a929896d02722cd18903faeb4c5f4103"
+              ),
+              "Libavutil": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libavutil.xcframework.zip",
+                  "62d7d932c0a9d2bd45a23d7845db12a293b4f810e5cfae2b5e4ad05e8b737a1b"
+              ),
+              "Libswresample": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libswresample.xcframework.zip",
+                  "80fbd7a266d0633a916d21a01fcfab347b4ffb8d16c7a02e43671ef71e6999f0"
+              ),
+              "Libswscale": (
+                  "https://github.com/mpvkit/MPVKit/releases/download/0.41.0-n8.1.2/Libswscale.xcframework.zip",
+                  "fd968cad30f5295082b86a8ab7ada5dd9ea18e9049ec194a748e91bd0027afb5"
+              ),
+              "Libmpv": (
+                  "https://github.com/NuvioMedia/MPVKit/releases/download/0.41.0-n8.1.2-nuvio.2/Libmpv.xcframework.zip",
+                  "d2abcf546c715fc9dd740ac0a5ddfa88b002a3a41c91f2f9df1938924895a3ad"
+              ),
+          }
+
+          with open("Package.swift", "r") as f:
+              content = f.read()
+
+          for name, (url, checksum) in replacements.items():
+              pattern = (
+                  r'(\.binaryTarget\(\s*\n\s*name:\s*"' + re.escape(name) + r'",\s*\n)'
+                  r'\s*path:\s*"[^"]+"\s*\n'
+                  r'(\s*\))'
+              )
+              replacement = (
+                  r'\g<1>'
+                  f'            url: "{url}",\n'
+                  f'            checksum: "{checksum}"\n'
+                  r'\g<2>'
+              )
+              new_content, count = re.subn(pattern, replacement, content)
+              if count:
+                  print(f"patched {name}")
+                  content = new_content
+              else:
+                  print(f"skipped {name} (already url-based or not found)")
+
+          with open("Package.swift", "w") as f:
+              f.write(content)
+          print("Done.")
+          PYEOF
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download Nuvio Engine Apple XCFramework (public release)
+        run: |
+          set -euo pipefail
+          ENGINE_ROOT="../nuvio-engine/platform/apple"
+          ENGINE_DEST="${ENGINE_ROOT}/NuvioEngine.xcframework"
+          ARCHIVE="${RUNNER_TEMP}/nuvio-engine-apple-${NUVIO_ENGINE_VERSION}.zip"
+          EXTRACT_DIR="${RUNNER_TEMP}/nuvio-engine-apple-${NUVIO_ENGINE_VERSION}"
+
+          rm -rf "${ENGINE_ROOT}" "${EXTRACT_DIR}" "${ARCHIVE}"
+          mkdir -p "${ENGINE_ROOT}" "${EXTRACT_DIR}"
+
+          curl --fail --location --retry 5 --retry-all-errors \
+            "https://github.com/NuvioMedia/nuvio-engine/releases/download/v${NUVIO_ENGINE_VERSION}/nuvio-engine-apple-${NUVIO_ENGINE_VERSION}.zip" \
+            --output "${ARCHIVE}"
+
+          ditto -x -k "${ARCHIVE}" "${EXTRACT_DIR}"
+          XCFRAMEWORK="$(find "${EXTRACT_DIR}" -type d -name NuvioEngine.xcframework -print -quit)"
+          if [ -z "${XCFRAMEWORK}" ]; then
+            echo "::error::NuvioEngine.xcframework not found in archive"; find "${EXTRACT_DIR}" -maxdepth 4 -print; exit 1
+          fi
+          ditto "${XCFRAMEWORK}" "${ENGINE_DEST}"
+          echo "Nuvio Engine installed at ${ENGINE_DEST}"
+
+      - name: Generate local.properties from secrets
+        run: |
+          cat << EOF > local.properties
+          NUVIO_SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          NUVIO_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
+          TRAKT_REDIRECT_URI=${{ secrets.TRAKT_REDIRECT_URI }}
+          PREMIUMIZE_CLIENT_ID=${{ secrets.PREMIUMIZE_CLIENT_ID }}
+          PREMIUMIZE_CLIENT_SECRET=${{ secrets.PREMIUMIZE_CLIENT_SECRET }}
+          PREMIUMIZE_REDIRECT_URI=${{ secrets.PREMIUMIZE_REDIRECT_URI }}
+          TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+          INTRODB_API_URL=${{ secrets.INTRODB_API_URL }}
+          CONTRIBUTIONS_URL=${{ secrets.CONTRIBUTIONS_URL }}
+          DONATIONS_BASE_URL=${{ secrets.DONATIONS_BASE_URL }}
+          DONATIONS_DONATE_URL=${{ secrets.DONATIONS_DONATE_URL }}
+          DIRECT_DEBRID_API_BASE_URL=${{ secrets.DIRECT_DEBRID_API_BASE_URL }}
+          NUVIO_IOS_DISTRIBUTION=full
+          EOF
+
+      - name: Build iOS app (unsigned)
+        run: |
+          cd iosApp
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package into .ipa
+        run: |
+          cd iosApp/build/Build/Products/Release-iphoneos
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Nuvio.app/Info.plist)
+          mkdir Payload
+          mv Nuvio.app Payload/
+          zip -q -r "Nuvio-v${APP_VERSION}-Full.ipa" Payload
+          echo "IPA_PATH=$PWD/Nuvio-v${APP_VERSION}-Full.ipa" >> "$GITHUB_ENV"
+
+      - name: Publish release on this fork
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Nuvio ${TAG} — iOS Full (unsigned)" \
+            --notes "Unsigned **Full** iOS IPA, auto-built from \`${UPSTREAM}@${TAG}\`.
+
+          Install with AltStore / SideStore / Sideloadly (re-signs on-device with your Apple ID; free accounts refresh every 7 days).
+
+          This is an automated personal build and is not affiliated with or endorsed by Nuvio." \
+            "${IPA_PATH}"
