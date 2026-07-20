@@ -1,0 +1,75 @@
+name: Sync my forks with upstream
+
+# Cloud version of ~/nuvio-automation/sync-forks.sh — keeps all of Chris2004m's
+# forks current with their upstreams, every 6 hours, independent of any local machine.
+#
+# Needs a Personal Access Token (classic: scopes `repo` + `workflow`, or a fine-grained
+# token with Contents:write + Workflows:write on the forks) stored as the secret SYNC_PAT.
+# The built-in GITHUB_TOKEN can't be used here because it only has access to THIS repo,
+# not the other forks.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-my-forks
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fast-forward / merge all forks
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      ME: Chris2004m
+    steps:
+      - name: Sync every fork with its upstream
+        run: |
+          set -u
+
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "SYNC_PAT secret is not set yet — skipping. Add it to enable cloud sync."
+            exit 0
+          fi
+
+          # fork -> upstream (owner/repo). These are fast-forwarded.
+          declare -A UP=(
+            [NuvioTV]=NuvioMedia/NuvioTV
+            [NuvioWeb]=NuvioMedia/NuvioWeb
+            [NuvioDesktop]=NuvioMedia/NuvioDesktop
+            [NuvioTVWebOS]=NuvioMedia/NuvioTVWebOS
+            [NuvioTVTizenBrew]=NuvioMedia/NuvioTVTizenBrew
+            [NuvioWebTVInstaller]=NuvioMedia/NuvioWebTVInstaller
+            [NuvioTizen]=NuvioMedia/NuvioTizen
+            [Usenet-Ultimate]=DSmart33/Usenet-Ultimate
+          )
+
+          fail=0
+          for fork in "${!UP[@]}"; do
+            br="$(gh api "repos/${ME}/${fork}" --jq .default_branch 2>/dev/null)"
+            if [ -z "$br" ]; then
+              echo "SKIP        ${fork} (could not read default branch)"; fail=1; continue
+            fi
+            if out="$(gh repo sync "${ME}/${fork}" --source "${UP[$fork]}" --branch "$br" 2>&1)"; then
+              echo "OK          ${fork} (${br}) <= ${UP[$fork]}   ${out}"
+            else
+              echo "SYNC-FAILED ${fork} (${br}) <= ${UP[$fork]}   ${out}"
+              fail=1
+            fi
+          done
+
+          # NuvioMobile carries the build workflows, so it's permanently ahead of upstream
+          # and can't be fast-forwarded — merge upstream in instead (never conflicts).
+          printf 'MERGE       NuvioMobile (cmp-rewrite) <= NuvioMedia/NuvioMobile   '
+          if out="$(gh api --method POST "repos/${ME}/NuvioMobile/merge-upstream" -f branch=cmp-rewrite 2>&1)"; then
+            echo "${out}"
+          else
+            echo ""; echo "MERGE-FAILED NuvioMobile   ${out}"; fail=1
+          fi
+
+          exit $fail
