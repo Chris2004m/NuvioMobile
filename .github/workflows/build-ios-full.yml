@@ -11,8 +11,10 @@ name: Build iOS Full IPA
 # Sideloadly, which re-sign on-device with your own free Apple ID.
 
 on:
-  schedule:
-    - cron: '47 * * * *'   # hourly, at :47 (staggered from the sync workflow, off the top-of-hour)
+  # Hourly auto-build PAUSED during build validation — re-enable (uncomment) once we have
+  # a confirmed green build so it doesn't keep retrying a not-yet-working build every hour.
+  # schedule:
+  #   - cron: '47 * * * *'   # hourly, at :47 (staggered from the sync workflow, off the top-of-hour)
   workflow_dispatch:
     inputs:
       tag:
