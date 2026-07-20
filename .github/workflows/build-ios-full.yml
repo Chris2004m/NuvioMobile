@@ -282,7 +282,7 @@ jobs:
           set -euo pipefail
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Nuvio ${TAG} — iOS Full (unsigned)" \
+            --title "Nuvio ${TAG}" \
             --notes "Unsigned **Full** iOS IPA, auto-built from \`${UPSTREAM}@${TAG}\`.
 
           Install with AltStore / SideStore / Sideloadly (re-signs on-device with your Apple ID; free accounts refresh every 7 days).
