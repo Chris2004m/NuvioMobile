@@ -274,8 +274,8 @@ jobs:
           APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Nuvio.app/Info.plist)
           mkdir Payload
           mv Nuvio.app Payload/
-          zip -q -r "Nuvio-v${APP_VERSION}-Full.ipa" Payload
-          echo "IPA_PATH=$PWD/Nuvio-v${APP_VERSION}-Full.ipa" >> "$GITHUB_ENV"
+          zip -q -r "Nuvio-${APP_VERSION}.ipa" Payload
+          echo "IPA_PATH=$PWD/Nuvio-${APP_VERSION}.ipa" >> "$GITHUB_ENV"
 
       - name: Publish release on this fork
         run: |
