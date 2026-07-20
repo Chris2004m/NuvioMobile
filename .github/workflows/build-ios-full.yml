@@ -182,6 +182,40 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Cache Kotlin/Native toolchain (~/.konan)
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ hashFiles('**/libs.versions.toml', 'gradle.properties') }}
+          restore-keys: konan-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: gradle-
+
+      - name: Cache Swift packages (MPVKit xcframeworks)
+        uses: actions/cache@v4
+        with:
+          path: .spm
+          key: spm-${{ hashFiles('MPVKit/Package.swift') }}
+          restore-keys: spm-
+
+      - name: Right-size JVM / Kotlin-Native memory for the runner
+        run: |
+          {
+            echo ""
+            echo "# --- CI overrides: fit the ~14 GB runner and stop swapping ---"
+            echo "org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
+            echo "kotlin.native.jvmArgs=-Xmx6g"
+            echo "org.gradle.daemon=false"
+            echo "org.gradle.workers.max=2"
+          } >> gradle.properties
+
       - name: Download Nuvio Engine Apple XCFramework (public release)
         run: |
           set -euo pipefail
@@ -226,6 +260,8 @@ jobs:
           EOF
 
       - name: Build iOS app (unsigned)
+        env:
+          KOTLIN_DAEMON_JVMARGS: "-Xmx3g"
         run: |
           cd iosApp
           xcodebuild \
@@ -235,6 +271,7 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -derivedDataPath build \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/.spm" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
