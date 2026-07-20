@@ -12,7 +12,7 @@ name: Build iOS Full IPA
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '47 * * * *'   # hourly, at :47 (staggered from the sync workflow, off the top-of-hour)
   workflow_dispatch:
     inputs:
       tag:
