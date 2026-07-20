@@ -207,13 +207,17 @@ jobs:
 
       - name: Right-size JVM / Kotlin-Native memory for the runner
         run: |
+          # The repo asks for 36G total (Gradle 12G + Kotlin/Native 16G + daemon 8G) on a
+          # ~14GB runner, which thrashes swap. Keep Kotlin/Native at its proven 16G (dropping
+          # it OOMs the compiler) but cut the wasteful Gradle/daemon heaps so K-N has real RAM.
           {
             echo ""
-            echo "# --- CI overrides: fit the ~14 GB runner and stop swapping ---"
-            echo "org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8"
-            echo "kotlin.native.jvmArgs=-Xmx6g"
+            echo "# --- CI memory overrides (append = override) ---"
+            echo "org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8"
+            echo "kotlin.native.jvmArgs=-Xmx16g"
+            echo "kotlin.daemon.jvmargs=-Xmx4g"
             echo "org.gradle.daemon=false"
-            echo "org.gradle.workers.max=2"
+            echo "org.gradle.workers.max=1"
           } >> gradle.properties
 
       - name: Download Nuvio Engine Apple XCFramework (public release)
@@ -241,7 +245,7 @@ jobs:
 
       - name: Generate local.properties from secrets
         run: |
-          cat << EOF > local.properties
+          cat << 'EOF' > local.properties
           NUVIO_SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           NUVIO_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
           TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
