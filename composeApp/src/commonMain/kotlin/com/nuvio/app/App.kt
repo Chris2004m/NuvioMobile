@@ -208,6 +208,7 @@ import com.nuvio.app.features.settings.SupportersContributorsSettingsScreen
 import com.nuvio.app.features.settings.LicensesAttributionsSettingsScreen
 import com.nuvio.app.features.settings.NavBarStyle
 import com.nuvio.app.features.settings.ThemeSettingsRepository
+import com.nuvio.app.features.home.components.shouldBlurContinueWatchingArtwork
 import com.nuvio.app.features.collection.CollectionManagementScreen
 import com.nuvio.app.features.collection.CollectionEditorScreen
 import com.nuvio.app.features.collection.CollectionEditorRepository
@@ -3459,6 +3460,11 @@ private fun MainAppContent(
                             imageUrl = cloudLibraryDisplayArtworkUrl(anchor.imageUrl ?: item.poster ?: item.imageUrl),
                             title = item.title,
                             subtitle = localizedContinueWatchingSubtitle(item),
+                            blurred = item.shouldBlurContinueWatchingArtwork(
+                                blurUnwatchedEpisodes = continueWatchingPreferencesUiState.blurNextUp,
+                                useEpisodeThumbnails = continueWatchingPreferencesUiState.useEpisodeThumbnails,
+                                artworkUrl = anchor.imageUrl ?: item.poster ?: item.imageUrl,
+                            ),
                             depthSurface = NuvioCardDepthSurface.ContinueWatching,
                             anchor = anchor,
                             actions = buildList {
